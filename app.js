@@ -1,4 +1,5 @@
 const STORAGE_KEY = "compoundInterest.taxScenario";
+const SCENARIOS_STORAGE_KEY = "compoundInterest.taxScenarios";
 
 /**
  * TaxSettings
@@ -237,11 +238,17 @@ function applyRegimeDefaults(settings) {
   }
 }
 
-function getEffectiveCapitalGainTaxRate(settings) {
-  return (
-    settings.ordinaryTaxQuota * settings.ordinaryCapitalGainTaxRate +
-    settings.governmentBondTaxQuota * settings.governmentBondTaxRate
-  );
+function getEffectiveCapitalGainTaxRate(settings, instrumentType) {
+  if (instrumentType === "GOVERNMENT_BOND") {
+    return settings.governmentBondTaxRate;
+  }
+
+  const ordinaryRate =
+    instrumentType === "FUND_ETF"
+      ? settings.fundEtfTaxRate
+      : settings.ordinaryCapitalGainTaxRate;
+
+  return settings.ordinaryTaxQuota * ordinaryRate + settings.governmentBondTaxQuota * settings.governmentBondTaxRate;
 }
 
 function getDistributionTaxRate(settings, instrumentType) {
@@ -329,7 +336,7 @@ function simulateInvestment(input, settings, method = "compound") {
   const grossDistributionHalfMonthRate = grossDistributionMonthlyRate / 2;
   const distributionHalfMonthRate = distributionMonthlyRate / 2;
   const terHalfMonthRate = terMonthlyRate / 2;
-  const effectiveTaxRate = getEffectiveCapitalGainTaxRate(settings);
+  const effectiveTaxRate = getEffectiveCapitalGainTaxRate(settings, input.instrumentType);
   const distributionTaxRate = getDistributionTaxRate(settings, input.instrumentType);
 
   if (method === "simple") {
@@ -474,8 +481,8 @@ function simulateInvestment(input, settings, method = "compound") {
     grossFinalCapital: Math.max(0, grossBalance),
     netFinalCapital: Math.max(0, netBalance),
     investedCapital: totalContributions,
-    grossGain: Math.max(0, grossBalance - totalContributions),
-    netGain: Math.max(0, netBalance - totalContributions),
+    grossGain: grossBalance - totalContributions,
+    netGain: netBalance - totalContributions,
     taxableGain: taxableExitGain,
     totalTaxes: taxes,
     effectiveTaxRate,
@@ -637,8 +644,8 @@ function simulateSimpleInvestment(context) {
     grossFinalCapital: Math.max(0, grossPrincipal + grossAccruedInterest),
     netFinalCapital: Math.max(0, netPrincipal + netAccruedInterest),
     investedCapital: totalContributions,
-    grossGain: Math.max(0, grossPrincipal + grossAccruedInterest - totalContributions),
-    netGain: Math.max(0, netPrincipal + netAccruedInterest - totalContributions),
+    grossGain: grossPrincipal + grossAccruedInterest - totalContributions,
+    netGain: netPrincipal + netAccruedInterest - totalContributions,
     taxableGain: taxableExitGain,
     totalTaxes: taxes,
     effectiveTaxRate,
@@ -878,7 +885,7 @@ function setupChartTooltip(points, simplePoints, initialCapital) {
   }
 
   hitAreas.forEach((area) => {
-    area.addEventListener("pointermove", (event) => {
+    area.onpointermove = (event) => {
       const index = Number(area.dataset.index);
       const compoundPoint = points[index];
       const simplePoint = simplePoints[index];
@@ -909,12 +916,12 @@ function setupChartTooltip(points, simplePoints, initialCapital) {
 
       tooltip.style.left = `${left}px`;
       tooltip.style.top = `${top}px`;
-    });
+    };
 
-    area.addEventListener("pointerleave", hideChartTooltip);
+    area.onpointerleave = hideChartTooltip;
   });
 
-  chartWrap.addEventListener("pointerleave", hideChartTooltip);
+  chartWrap.onpointerleave = hideChartTooltip;
 
   function hideChartTooltip() {
     tooltip.classList.remove("is-visible");
@@ -943,15 +950,21 @@ function renderScenarios() {
     return;
   }
 
+  const input = readInvestmentSettings();
+
   scenarios.forEach((scenario, index) => {
+    const result = simulateInvestment(input, scenario.taxSettings, "compound");
     const row = document.createElement("div");
     row.className = "scenario-row";
     row.innerHTML = `
       <div>
         <strong>${scenario.name}</strong>
-        <span>${currencyFormatter.format(scenario.netFinalCapital)} netto, ${percentFormatter.format(scenario.effectiveTaxRate)} aliquota media</span>
+        <span>${currencyFormatter.format(result.netFinalCapital)} netto, ${currencyFormatter.format(result.netGain)} plusvalenza netta, ${percentFormatter.format(result.effectiveTaxRate)} aliquota media</span>
       </div>
-      <button class="secondary-button" type="button" data-load-scenario="${index}">Carica</button>
+      <div class="scenario-actions">
+        <button class="secondary-button" type="button" data-load-scenario="${index}">Carica</button>
+        <button class="secondary-button danger-button" type="button" data-delete-scenario="${index}">Elimina</button>
+      </div>
     `;
     scenarioList.append(row);
   });
@@ -983,46 +996,108 @@ function saveTaxScenario() {
     return;
   }
 
-  const payload = {
+  addScenario({
     name,
     taxSettings: cloneTaxSettings(taxSettings)
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  });
 }
 
 function loadTaxScenario() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
+  loadStoredScenarios();
+
+  if (scenarios.length === 0) {
     renderValidation([{ type: "warning", text: "Nessuno scenario fiscale salvato nel browser." }]);
     return;
   }
 
-  try {
-    const payload = JSON.parse(raw);
-    taxSettings = {
-      ...cloneTaxSettings(italianDefaultTaxSettings),
-      ...payload.taxSettings
-    };
-    manualTaxEditing = true;
-    renderTaxFields();
-    update();
-  } catch {
-    renderValidation([{ type: "error", text: "Scenario fiscale salvato non leggibile." }]);
-  }
+  applyScenario(scenarios[scenarios.length - 1]);
 }
 
 function duplicateScenario() {
-  const input = readInvestmentSettings();
-  const result = simulateInvestment(input, taxSettings, "compound");
+  addScenario({
+    name: `${buildScenarioName()} ${scenarios.length + 1}`,
+    taxSettings: cloneTaxSettings(taxSettings)
+  });
+}
+
+function addScenario(scenario) {
   scenarios = [
     ...scenarios,
     {
-      name: buildScenarioName(),
-      taxSettings: cloneTaxSettings(taxSettings),
-      netFinalCapital: result.netFinalCapital,
-      effectiveTaxRate: result.effectiveTaxRate
+      id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : String(Date.now()),
+      createdAt: new Date().toISOString(),
+      ...scenario
     }
   ];
+  persistScenarios();
+  renderScenarios();
+}
+
+function applyScenario(scenario) {
+  taxSettings = {
+    ...cloneTaxSettings(italianDefaultTaxSettings),
+    ...scenario.taxSettings
+  };
+  manualTaxEditing = true;
+  renderTaxFields();
+  update();
+}
+
+function persistScenarios() {
+  localStorage.setItem(SCENARIOS_STORAGE_KEY, JSON.stringify(scenarios));
+  const latestScenario = scenarios[scenarios.length - 1];
+
+  if (!latestScenario) {
+    localStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      name: latestScenario.name,
+      taxSettings: latestScenario.taxSettings
+    })
+  );
+}
+
+function loadStoredScenarios() {
+  const rawScenarios = localStorage.getItem(SCENARIOS_STORAGE_KEY);
+
+  if (rawScenarios) {
+    try {
+      scenarios = JSON.parse(rawScenarios).filter((scenario) => scenario?.taxSettings);
+      renderScenarios();
+      return;
+    } catch {
+      scenarios = [];
+    }
+  }
+
+  const rawLegacyScenario = localStorage.getItem(STORAGE_KEY);
+
+  if (!rawLegacyScenario) {
+    renderScenarios();
+    return;
+  }
+
+  try {
+    const payload = JSON.parse(rawLegacyScenario);
+    scenarios = payload?.taxSettings
+      ? [
+          {
+            id: "legacy-scenario",
+            name: payload.name || "Scenario fiscale salvato",
+            createdAt: new Date().toISOString(),
+            taxSettings: payload.taxSettings
+          }
+        ]
+      : [];
+    persistScenarios();
+  } catch {
+    scenarios = [];
+  }
+
   renderScenarios();
 }
 
@@ -1040,6 +1115,7 @@ function update() {
   };
   renderResults(results);
   renderValidation(validate(taxSettings, results.compound));
+  renderScenarios();
 }
 
 modeButtons.forEach((button) => {
@@ -1105,18 +1181,25 @@ document.querySelector("#loadTaxScenario").addEventListener("click", loadTaxScen
 document.querySelector("#duplicateScenario").addEventListener("click", duplicateScenario);
 
 scenarioList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-load-scenario]");
-  if (!button) {
+  const loadButton = event.target.closest("[data-load-scenario]");
+  const deleteButton = event.target.closest("[data-delete-scenario]");
+
+  if (loadButton) {
+    const scenario = scenarios[Number(loadButton.dataset.loadScenario)];
+    if (scenario) {
+      applyScenario(scenario);
+    }
     return;
   }
 
-  const scenario = scenarios[Number(button.dataset.loadScenario)];
-  taxSettings = cloneTaxSettings(scenario.taxSettings);
-  manualTaxEditing = true;
-  renderTaxFields();
-  update();
+  if (deleteButton) {
+    const index = Number(deleteButton.dataset.deleteScenario);
+    scenarios = scenarios.filter((_, scenarioIndex) => scenarioIndex !== index);
+    persistScenarios();
+    renderScenarios();
+  }
 });
 
 renderTaxFields();
-renderScenarios();
+loadStoredScenarios();
 setMode(currentMode);

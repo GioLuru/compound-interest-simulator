@@ -595,6 +595,22 @@ body.simple-mode .advanced-only {
   background: #ffffff;
 }
 
+.scenario-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
+}
+
+.danger-button {
+  color: var(--bad);
+}
+
+.danger-button:hover {
+  border-color: var(--bad);
+  background: #fff0ed;
+}
+
 .scenario-row strong,
 .scenario-row span {
   display: block;
@@ -642,5 +658,13 @@ body.simple-mode .advanced-only {
 
   .tax-actions {
     display: grid;
+  }
+
+  .scenario-row {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-actions {
+    justify-content: stretch;
   }
 }

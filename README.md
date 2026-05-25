@@ -20,5 +20,3 @@ Non sono richiesti installazione, build step o dipendenze esterne.
 - Preset fiscale Italia modificabile manualmente.
 - Oggetto fiscale separato usato dal motore di calcolo.
 - Bollo, IVAFE, minusvalenze, quote agevolate e timing fiscale configurabili.
-- Salvataggio e caricamento scenario fiscale da `localStorage`.
-- Lista scenari fiscali salvata in `localStorage`, con caricamento, eliminazione e confronto ricalcolato sui parametri investimento correnti.

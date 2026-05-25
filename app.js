@@ -1,6 +1,3 @@
-const STORAGE_KEY = "compoundInterest.taxScenario";
-const SCENARIOS_STORAGE_KEY = "compoundInterest.taxScenarios";
-
 /**
  * TaxSettings
  * {
@@ -70,7 +67,6 @@ const percentFormatter = new Intl.NumberFormat("it-IT", {
 let taxSettings = cloneTaxSettings(italianDefaultTaxSettings);
 let manualTaxEditing = false;
 let currentMode = "simple";
-let scenarios = [];
 
 const form = document.querySelector("#simulator-form");
 const modeButtons = document.querySelectorAll(".mode-button");
@@ -78,7 +74,6 @@ const taxCountry = document.querySelector("#tax-country");
 const manualTaxToggle = document.querySelector("#manualTaxToggle");
 const taxInputs = document.querySelectorAll("[data-tax-field]");
 const validationList = document.querySelector("#validationList");
-const scenarioList = document.querySelector("#scenarioList");
 const managedRegimeNote = document.querySelector("#managedRegimeNote");
 
 function cloneTaxSettings(settings) {
@@ -939,168 +934,6 @@ function tooltipRow(marker, label, value) {
   `;
 }
 
-function renderScenarios() {
-  scenarioList.innerHTML = "";
-
-  if (scenarios.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "help-text";
-    empty.textContent = "Duplica uno scenario per confrontare impostazioni fiscali diverse.";
-    scenarioList.append(empty);
-    return;
-  }
-
-  const input = readInvestmentSettings();
-
-  scenarios.forEach((scenario, index) => {
-    const result = simulateInvestment(input, scenario.taxSettings, "compound");
-    const row = document.createElement("div");
-    row.className = "scenario-row";
-    row.innerHTML = `
-      <div>
-        <strong>${scenario.name}</strong>
-        <span>${currencyFormatter.format(result.netFinalCapital)} netto, ${currencyFormatter.format(result.netGain)} plusvalenza netta, ${percentFormatter.format(result.effectiveTaxRate)} aliquota media</span>
-      </div>
-      <div class="scenario-actions">
-        <button class="secondary-button" type="button" data-load-scenario="${index}">Carica</button>
-        <button class="secondary-button danger-button" type="button" data-delete-scenario="${index}">Elimina</button>
-      </div>
-    `;
-    scenarioList.append(row);
-  });
-}
-
-function buildScenarioName() {
-  if (taxSettings.country === "CUSTOM") {
-    return "Scenario personalizzato";
-  }
-
-  if (taxSettings.brokerTaxRegime === "ADMINISTERED") {
-    return "Scenario Italia - Regime amministrato";
-  }
-
-  if (taxSettings.brokerTaxRegime === "DECLARATIVE") {
-    return "Scenario Italia - Broker estero";
-  }
-
-  if (taxSettings.brokerTaxRegime === "MANAGED") {
-    return "Scenario Italia - Regime gestito";
-  }
-
-  return "Scenario fiscale";
-}
-
-function saveTaxScenario() {
-  const name = window.prompt("Nome scenario fiscale", buildScenarioName());
-  if (!name) {
-    return;
-  }
-
-  addScenario({
-    name,
-    taxSettings: cloneTaxSettings(taxSettings)
-  });
-}
-
-function loadTaxScenario() {
-  loadStoredScenarios();
-
-  if (scenarios.length === 0) {
-    renderValidation([{ type: "warning", text: "Nessuno scenario fiscale salvato nel browser." }]);
-    return;
-  }
-
-  applyScenario(scenarios[scenarios.length - 1]);
-}
-
-function duplicateScenario() {
-  addScenario({
-    name: `${buildScenarioName()} ${scenarios.length + 1}`,
-    taxSettings: cloneTaxSettings(taxSettings)
-  });
-}
-
-function addScenario(scenario) {
-  scenarios = [
-    ...scenarios,
-    {
-      id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : String(Date.now()),
-      createdAt: new Date().toISOString(),
-      ...scenario
-    }
-  ];
-  persistScenarios();
-  renderScenarios();
-}
-
-function applyScenario(scenario) {
-  taxSettings = {
-    ...cloneTaxSettings(italianDefaultTaxSettings),
-    ...scenario.taxSettings
-  };
-  manualTaxEditing = true;
-  renderTaxFields();
-  update();
-}
-
-function persistScenarios() {
-  localStorage.setItem(SCENARIOS_STORAGE_KEY, JSON.stringify(scenarios));
-  const latestScenario = scenarios[scenarios.length - 1];
-
-  if (!latestScenario) {
-    localStorage.removeItem(STORAGE_KEY);
-    return;
-  }
-
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      name: latestScenario.name,
-      taxSettings: latestScenario.taxSettings
-    })
-  );
-}
-
-function loadStoredScenarios() {
-  const rawScenarios = localStorage.getItem(SCENARIOS_STORAGE_KEY);
-
-  if (rawScenarios) {
-    try {
-      scenarios = JSON.parse(rawScenarios).filter((scenario) => scenario?.taxSettings);
-      renderScenarios();
-      return;
-    } catch {
-      scenarios = [];
-    }
-  }
-
-  const rawLegacyScenario = localStorage.getItem(STORAGE_KEY);
-
-  if (!rawLegacyScenario) {
-    renderScenarios();
-    return;
-  }
-
-  try {
-    const payload = JSON.parse(rawLegacyScenario);
-    scenarios = payload?.taxSettings
-      ? [
-          {
-            id: "legacy-scenario",
-            name: payload.name || "Scenario fiscale salvato",
-            createdAt: new Date().toISOString(),
-            taxSettings: payload.taxSettings
-          }
-        ]
-      : [];
-    persistScenarios();
-  } catch {
-    scenarios = [];
-  }
-
-  renderScenarios();
-}
-
 function update() {
   const input = readInvestmentSettings();
 
@@ -1115,7 +948,6 @@ function update() {
   };
   renderResults(results);
   renderValidation(validate(taxSettings, results.compound));
-  renderScenarios();
 }
 
 modeButtons.forEach((button) => {
@@ -1176,30 +1008,5 @@ document.querySelector("#resetItalianTax").addEventListener("click", () => {
   update();
 });
 
-document.querySelector("#saveTaxScenario").addEventListener("click", saveTaxScenario);
-document.querySelector("#loadTaxScenario").addEventListener("click", loadTaxScenario);
-document.querySelector("#duplicateScenario").addEventListener("click", duplicateScenario);
-
-scenarioList.addEventListener("click", (event) => {
-  const loadButton = event.target.closest("[data-load-scenario]");
-  const deleteButton = event.target.closest("[data-delete-scenario]");
-
-  if (loadButton) {
-    const scenario = scenarios[Number(loadButton.dataset.loadScenario)];
-    if (scenario) {
-      applyScenario(scenario);
-    }
-    return;
-  }
-
-  if (deleteButton) {
-    const index = Number(deleteButton.dataset.deleteScenario);
-    scenarios = scenarios.filter((_, scenarioIndex) => scenarioIndex !== index);
-    persistScenarios();
-    renderScenarios();
-  }
-});
-
 renderTaxFields();
-loadStoredScenarios();
 setMode(currentMode);

@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Compound Interest Simulator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Simulatore investimento</p>
+          <h1>Interesse composto vs semplice</h1>
+        </div>
+
+        <div class="mode-switch" role="group" aria-label="Modalita visualizzazione">
+          <button class="mode-button is-active" type="button" data-mode="simple">Base</button>
+          <button class="mode-button" type="button" data-mode="advanced">Avanzata</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <form class="panel controls" id="simulator-form">
+          <div class="section-heading">
+            <h2>Parametri investimento</h2>
+          </div>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Capitale iniziale</span>
+              <div class="input-affix">
+                <input id="initialCapital" type="number" min="0" step="100" value="10000" />
+                <span>EUR</span>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Versamento mensile</span>
+              <div class="input-affix">
+                <input id="monthlyContribution" type="number" min="0" step="50" value="300" />
+                <span>EUR</span>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Rendimento annuo lordo</span>
+              <div class="input-affix">
+                <input id="annualReturnRate" type="number" min="-100" step="0.1" value="6" />
+                <span>%</span>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Durata</span>
+              <div class="input-affix">
+                <input id="years" type="number" min="1" max="80" step="1" value="20" />
+                <span>anni</span>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Tipo di tasso annuo</span>
+              <select id="annualRateConvention">
+                <option value="NOMINAL_MONTHLY">Nominale con calcolo mensile</option>
+                <option value="EFFECTIVE_ANNUAL">Effettivo annuo</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Momento versamenti</span>
+              <select id="contributionTiming">
+                <option value="END">Fine mese</option>
+                <option value="MID">Metà mese</option>
+                <option value="BEGIN">Inizio mese</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="advanced-only">
+            <div class="section-heading">
+              <h2>Rendite e strumento</h2>
+            </div>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Tipo strumento</span>
+                <select id="instrumentType">
+                  <option value="FUND_ETF">ETF / fondi</option>
+                  <option value="STOCK">Azioni con dividendi</option>
+                  <option value="CORPORATE_BOND">Obbligazioni corporate</option>
+                  <option value="GOVERNMENT_BOND">Titoli di Stato / white list</option>
+                  <option value="DEPOSIT">Conto deposito</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Quota annua distribuita</span>
+                <div class="input-affix">
+                  <input id="annualDistributionYield" type="number" min="0" max="100" step="0.1" value="0" />
+                  <span>%</span>
+                </div>
+              </label>
+
+              <label class="field">
+                <span>Costo annuo strumento / TER</span>
+                <div class="input-affix">
+                  <input id="annualTer" type="number" min="0" max="100" step="0.01" value="0" />
+                  <span>%</span>
+                </div>
+              </label>
+
+              <label class="field checkbox-field">
+                <input id="foreignBroker" type="checkbox" />
+                <span>Strumenti detenuti presso broker estero</span>
+              </label>
+            </div>
+          </div>
+
+          <section class="tax-section advanced-only" aria-labelledby="tax-title">
+            <div class="section-heading with-action">
+              <div>
+                <p class="eyebrow">Sezione avanzata</p>
+                <h2 id="tax-title">Fiscalita personalizzata</h2>
+              </div>
+              <button id="manualTaxToggle" class="secondary-button" type="button">
+                Modifica manualmente i parametri fiscali
+              </button>
+            </div>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Paese fiscale</span>
+                <select id="tax-country">
+                  <option value="IT">Italia</option>
+                  <option value="CUSTOM">Personalizzato</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Regime fiscale / tipo intermediario</span>
+                <select id="brokerTaxRegime" data-tax-field="brokerTaxRegime">
+                  <option value="ADMINISTERED">Regime amministrato</option>
+                  <option value="DECLARATIVE">Regime dichiarativo</option>
+                  <option value="MANAGED">Regime gestito</option>
+                  <option value="CUSTOM">Personalizzato</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="tax-note is-hidden" id="managedRegimeNote">
+              Il regime gestito puo applicare logiche operative specifiche dell'intermediario. Il simulatore usa le aliquote configurate.
+            </div>
+
+            <div class="subsection">
+              <h3>Aliquote modificabili</h3>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Aliquota tassazione plusvalenze ordinarie</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="ordinaryCapitalGainTaxRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Aliquota tassazione titoli di Stato / white list</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="governmentBondTaxRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Aliquota tassazione dividendi</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="dividendTaxRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Aliquota tassazione cedole obbligazionarie corporate</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="corporateBondCouponTaxRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Aliquota tassazione interessi conto deposito</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="depositInterestTaxRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Aliquota tassazione ETF / fondi</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="fundEtfTaxRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="subsection">
+              <h3>Imposte patrimoniali modificabili</h3>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Imposta di bollo annua</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="stampDutyRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>IVAFE annua per strumenti detenuti all'estero</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="ivafeRate" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Importo minimo imposta di bollo</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" step="1" data-tax-field="stampDutyMin" data-kind="optionalNumber" />
+                    <span>EUR</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Importo massimo imposta di bollo</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" step="1" data-tax-field="stampDutyMax" data-kind="optionalNumber" />
+                    <span>EUR</span>
+                  </div>
+                </label>
+
+                <label class="field checkbox-field">
+                  <input type="checkbox" data-tax-field="applyStampDuty" data-kind="boolean" />
+                  <span>Applica imposta di bollo</span>
+                </label>
+
+                <label class="field checkbox-field">
+                  <input type="checkbox" data-tax-field="applyIvafe" data-kind="boolean" />
+                  <span>Applica IVAFE</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="subsection">
+              <h3>Minusvalenze e compensazione fiscale</h3>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Minusvalenze pregresse disponibili</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" step="100" data-tax-field="lossCarryForward" data-kind="number" />
+                    <span>EUR</span>
+                  </div>
+                </label>
+
+                <label class="field checkbox-field">
+                  <input type="checkbox" data-tax-field="allowLossOffset" data-kind="boolean" />
+                  <span>Compensa minusvalenze dove possibile</span>
+                </label>
+
+                <label class="field">
+                  <span>Percentuale di plusvalenza compensabile</span>
+                  <div class="input-affix">
+                    <input type="number" min="0" max="100" step="0.01" data-tax-field="offsettableGainPercentage" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Anni residui di validita delle minusvalenze</span>
+                  <input type="number" min="0" step="1" data-tax-field="remainingLossCarryForwardYears" data-kind="optionalNumber" />
+                </label>
+              </div>
+            </div>
+
+            <div class="subsection">
+              <h3>Strumenti misti e quota agevolata</h3>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Quota soggetta ad aliquota ordinaria</span>
+                  <div class="input-affix">
+                    <input id="ordinaryTaxQuota" type="number" min="0" max="100" step="0.01" data-tax-field="ordinaryTaxQuota" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+
+                <label class="field">
+                  <span>Quota soggetta ad aliquota agevolata titoli di Stato</span>
+                  <div class="input-affix">
+                    <input id="governmentBondTaxQuota" type="number" min="0" max="100" step="0.01" data-tax-field="governmentBondTaxQuota" data-kind="percent" />
+                    <span>%</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="subsection">
+              <h3>Quando applicare le tasse</h3>
+              <div class="field-grid">
+                <label class="field checkbox-field">
+                  <input type="checkbox" data-tax-field="taxCapitalGainAtExit" data-kind="boolean" />
+                  <span>Tassa le plusvalenze solo alla vendita finale</span>
+                </label>
+
+                <label class="field checkbox-field">
+                  <input type="checkbox" data-tax-field="taxDistributionsAnnually" data-kind="boolean" />
+                  <span>Tassa annualmente dividendi, cedole o interessi</span>
+                </label>
+
+                <label class="field checkbox-field">
+                  <input type="checkbox" data-tax-field="taxUnrealizedGainsAnnually" data-kind="boolean" />
+                  <span>Tassa annualmente le plusvalenze maturate</span>
+                </label>
+              </div>
+              <p class="help-text">Questa opzione serve solo per scenari personalizzati, perche molti strumenti non tassano annualmente la plusvalenza non realizzata.</p>
+            </div>
+
+            <div class="tax-actions">
+              <button class="secondary-button" type="button" id="resetItalianTax">Ripristina fiscalita Italia</button>
+              <button class="secondary-button" type="button" id="saveTaxScenario">Salva scenario fiscale</button>
+              <button class="secondary-button" type="button" id="loadTaxScenario">Carica scenario fiscale salvato</button>
+              <button class="secondary-button" type="button" id="duplicateScenario">Duplica scenario</button>
+            </div>
+
+            <p class="disclaimer">
+              I valori fiscali sono modificabili manualmente. Le impostazioni predefinite sono pensate principalmente per un investitore fiscalmente residente in Italia, ma possono variare in base alla normativa vigente, al tipo di strumento, all'intermediario utilizzato e alla situazione personale dell'utente.
+            </p>
+          </section>
+        </form>
+
+        <section class="panel results" aria-live="polite">
+          <div class="section-heading">
+            <h2>Risultati</h2>
+          </div>
+
+          <div class="result-layout">
+            <article class="method-card is-primary">
+              <div class="method-card-head">
+                <span>Interesse composto</span>
+                <strong id="compoundNetFinalCapital">EUR 0</strong>
+                <p>Capitale finale netto</p>
+              </div>
+
+              <dl class="result-details">
+                <div>
+                  <dt>Capitale investito</dt>
+                  <dd id="compoundInvestedCapital">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Capitale lordo</dt>
+                  <dd id="compoundGrossFinalCapital">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Plusvalenza lorda</dt>
+                  <dd id="compoundGrossGain">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Plusvalenza netta</dt>
+                  <dd id="compoundNetGain">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Plusvalenza imponibile</dt>
+                  <dd id="compoundTaxableGain">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Costi TER stimati</dt>
+                  <dd id="compoundTerCosts">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Imposte stimate</dt>
+                  <dd id="compoundTotalTaxes">EUR 0</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article class="method-card">
+              <div class="method-card-head">
+                <span>Interesse semplice</span>
+                <strong id="simpleNetFinalCapital">EUR 0</strong>
+                <p>Capitale finale netto</p>
+              </div>
+
+              <dl class="result-details">
+                <div>
+                  <dt>Capitale investito</dt>
+                  <dd id="simpleInvestedCapital">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Capitale lordo</dt>
+                  <dd id="simpleGrossFinalCapital">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Plusvalenza lorda</dt>
+                  <dd id="simpleGrossGain">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Plusvalenza netta</dt>
+                  <dd id="simpleNetGain">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Plusvalenza imponibile</dt>
+                  <dd id="simpleTaxableGain">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Costi TER stimati</dt>
+                  <dd id="simpleTerCosts">EUR 0</dd>
+                </div>
+                <div>
+                  <dt>Imposte stimate</dt>
+                  <dd id="simpleTotalTaxes">EUR 0</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+
+          <div class="comparison-strip">
+            <div>
+              <span>Vantaggio netto del composto</span>
+              <strong id="compoundAdvantage">EUR 0</strong>
+            </div>
+            <div>
+              <span>Aliquota media effettiva</span>
+              <strong id="effectiveTaxRate">0%</strong>
+            </div>
+          </div>
+
+          <p class="result-note">
+            I calcolatori online mostrano spesso risultati lordi. Per confrontarli usa le righe "Capitale lordo". La plusvalenza imponibile e la base su cui viene applicata l'aliquota fiscale configurata, al netto di eventuali minusvalenze compensabili.
+          </p>
+
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>Andamento nel tempo</h3>
+              <div class="chart-legend" aria-hidden="true">
+                <span><i class="legend-swatch initial"></i>Capitale iniziale</span>
+                <span><i class="legend-swatch contributions"></i>Versamenti cumulati</span>
+                <span><i class="legend-swatch compound-gain"></i>Plusvalenza composta</span>
+                <span><i class="legend-line simple-gross"></i>Interesse semplice lordo</span>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <svg id="growthChart" role="img" aria-label="Grafico annuale crescita capitale" viewBox="0 0 920 380"></svg>
+              <div class="chart-tooltip" id="chartTooltip" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <div class="validation-list" id="validationList"></div>
+
+          <div class="scenario-area">
+            <div class="section-heading">
+              <h2>Scenari fiscali</h2>
+            </div>
+            <div id="scenarioList" class="scenario-list"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
